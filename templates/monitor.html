@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor – Hand Gesture System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/monitor.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <header class="monitor-header">
+    <span class="brand">Hand Gesture Monitor</span>
+    <div class="user-menu">
+      <span class="username">Welcome, {{ username }}</span>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </div>
+  </header>
+
+  <div class="monitor-layout">
+    <section class="video-section">
+      <h2>Live feed</h2>
+      <div class="video-wrap">
+        <img id="video-feed" src="{{ url_for('video_feed') }}" alt="Webcam feed">
+      </div>
+    </section>
+
+    <section class="result-section">
+      <h2>Detected gesture</h2>
+      <div class="emoji-display" id="emoji-display">👋</div>
+      <p class="gesture-label" id="gesture-label">Show a gesture</p>
+      <div class="accuracy-wrap">
+        <p class="accuracy-value" id="accuracy-text">—</p>
+        <div class="accuracy-bar">
+          <div class="accuracy-bar-fill" id="accuracy-bar" style="width: 0%"></div>
+        </div>
+      </div>
+      <ul class="gesture-list">
+        {% for key, emoji in gesture_emoji.items() %}
+        <li>
+          <div class="gesture-item-info">
+            <span class="emoji">{{ emoji }}</span> {{ key.replace('_', ' ') }}
+          </div>
+          <button class="btn-record" data-gesture="{{ key }}">Record</button>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="train-section">
+        <h3>Model</h3>
+        <button type="button" id="btn-train">Retrain model</button>
+        <p class="train-msg" id="train-msg"></p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const emojiEl = document.getElementById('emoji-display');
+    const labelEl = document.getElementById('gesture-label');
+    const accTextEl = document.getElementById('accuracy-text');
+    const accBarEl = document.getElementById('accuracy-bar');
+    const trainBtn = document.getElementById('btn-train');
+    const trainMsg = document.getElementById('train-msg');
+
+    let lastLandmarks = null;
+    let isRecording = false;
+    let recordingBuffer = [];
+    let recordingGesture = '';
+
+    function updatePrediction() {
+      fetch('{{ url_for("api_predict") }}')
+        .then(r => r.json())
+        .then(d => {
+          emojiEl.textContent = d.emoji || '👋';
+          labelEl.textContent = d.label || '—';
+          const pct = Math.round((d.confidence || 0) * 100);
+          accTextEl.textContent = pct ? pct + '% confidence' : '—';
+          accBarEl.style.width = pct + '%';
+          lastLandmarks = d.landmarks;
+
+          if (isRecording && lastLandmarks) {
+            recordingBuffer.push(lastLandmarks);
+            if (recordingBuffer.length >= 50) {
+              stopRecording();
+            }
+          }
+        })
+        .catch(() => { });
+    }
+
+    setInterval(updatePrediction, 150);
+
+    trainBtn.addEventListener('click', function () {
+      trainMsg.textContent = 'Training…';
+      trainBtn.disabled = true;
+      fetch('{{ url_for("api_train") }}', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+          trainMsg.textContent = d.message || (d.ok ? 'Done.' : 'Error');
+          trainBtn.disabled = false;
+        })
+        .catch(() => {
+          trainMsg.textContent = 'Request failed';
+          trainBtn.disabled = false;
+        });
+    });
+
+    document.querySelectorAll('.btn-record').forEach(btn => {
+      btn.addEventListener('click', function () {
+        if (isRecording) return;
+        startRecording(this.dataset.gesture, this);
+      });
+    });
+
+    function startRecording(gesture, btn) {
+      isRecording = true;
+      recordingGesture = gesture;
+      recordingBuffer = [];
+      btn.textContent = 'Recording...';
+      btn.style.backgroundColor = '#ff4444';
+      trainMsg.textContent = `Collecting samples for ${gesture}... Keep making the gesture!`;
+    }
+
+    function stopRecording() {
+      isRecording = false;
+      const btn = document.querySelector(`.btn-record[data-gesture="${recordingGesture}"]`);
+      btn.textContent = 'Saving...';
+      btn.style.backgroundColor = '';
+
+      fetch('{{ url_for("api_collect") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gesture: recordingGesture,
+          landmarks: recordingBuffer
+        })
+      })
+        .then(r => r.json())
+        .then(d => {
+          btn.textContent = 'Record';
+          trainMsg.textContent = d.saved ? `Saved ${d.saved} samples for ${recordingGesture}.` : d.message;
+        })
+        .catch(() => {
+          btn.textContent = 'Record';
+          trainMsg.textContent = 'Failed to save samples.';
+        });
+    }
+  </script>
+</body>
+
+</html>
