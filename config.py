@@ -38,6 +38,7 @@ GESTURE_EMOJI_MAP = {
     "rock": "🤘",
     "fist": "✊",
     "open_palm": "🖐️",
+    "distress_signal": "🆘",
 }
 
 # Display names for UI
@@ -53,7 +54,13 @@ GESTURE_DISPLAY_NAMES = {
     "rock": "Rock",
     "fist": "Fist",
     "open_palm": "Open Palm",
+    "distress_signal": "Distress Signal",
 }
+
+# Alert Configuration (Email)
+ALERT_EMAIL_SENDER = os.environ.get("ALERT_EMAIL_SENDER", "")
+ALERT_EMAIL_RECEIVER = os.environ.get("ALERT_EMAIL_RECEIVER", "")
+ALERT_EMAIL_PASSWORD = os.environ.get("ALERT_EMAIL_PASSWORD", "") # Use App Password for Gmail
 
 # Auth (simple file-based for demo)
 SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production-hand-gesture")
